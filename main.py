@@ -1,22 +1,39 @@
+# Импорт необходимых библиотек
 import requests
 import json
 import psycopg2
 
+# Список id компаний-работодателей
 employers_id = [1740, 1942330, 2245, 4219, 2748, 3529, 23427, 4352, 3127, 49357, 39305]
 
+# Пустые списки для данных компаний и их вакансий
 data_employers = []
 data_vacancies = []
 
 
 class EmployerParser:
+    """
+    Класс для поиска вакинсий по каждому работодателю из списка компаний
+    """
 
     def __init__(self, emp_id):
+        """
+        Инициация id компании
+        :param emp_id: id компании
+        """
         self.emp_id = emp_id
 
     def vacancy_filtering(self):
         """
-        Метод для фильтрации массива данных о вакансиях с hh.ru
+        Метод для нахождения и фильтрации массива данных о вакансиях с hh.ru
         :return: Отфильтрованный и приведенный к общему шаблону массив с необходимой информацией об вакансиях
+                 {'name': Название вакансии,
+                  'url': ссылка на вакансию,
+                  'salary_from': зарплата от...,
+                  'salary_to': зарплата до...,
+                  'experience': требуемый опыт,
+                  'requirement_and_responsibility': требования и обязаности,
+                  'employer': работодатель}
         """
         parametrs = {'per_page': 100}
         data_vac = json.loads(
@@ -50,24 +67,43 @@ class EmployerParser:
 
 
 class DBManager:
+    """
+    Класс для подключения с базе данных PostgreSQL
+    """
+
     def __init__(self):
+        """
+        Инициация подключения к базе данных
+        """
         self.conn = psycopg2.connect(host='localhost', database='hh.ru', user='postgres', password='2202')
         self.cur = self.conn.cursor()
-        # self.avg_salary = int(self.get_avg_salary())
 
     def get_companies_and_vacancies_count(self):
+        """
+        Функция для получения списка всех компаний и количество вакансий у каждой компании
+        :return: список
+        """
         self.cur.execute("SELECT employer_name, vacancy_count FROM employer")
         rows = self.cur.fetchall()
         for row in rows:
             print(row)
 
     def get_all_vacancies(self):
+        """
+        Функция для получения списка всех вакансий с указанием названия компании, названия вакансии и зарплаты
+        и ссылки на вакансию
+        :return: список
+        """
         self.cur.execute("SELECT  employer, vacancy_name,  salary_from, salary_to, url FROM vacancy")
         rows = self.cur.fetchall()
         for row in rows:
             print(row)
 
     def get_avg_salary(self):
+        """
+        Функция для получения средней зарплаты по вакансиям
+        :return: список
+        """
         self.cur.execute("SELECT  salary_from, salary_to FROM vacancy")
         rows = self.cur.fetchall()
         result = 0
@@ -83,6 +119,10 @@ class DBManager:
         return result_round
 
     def get_vacancies_with_higher_salary(self):
+        """
+        Функция для получения  списка всех вакансий, у которых зарплата выше средней по всем вакансиям
+        :return: список
+        """
         avg_salary = int(self.get_avg_salary())
         self.cur.execute("SELECT * FROM vacancy")
         rows = self.cur.fetchall()
@@ -92,6 +132,10 @@ class DBManager:
                     print(row)
 
     def get_vacancies_with_keyword(self, word):
+        """
+        Функция для получения  списка всех вакансий, в названии которых содержатся переданные в метод слова
+        :return: список
+        """
         self.cur.execute("SELECT * FROM vacancy")
         rows = self.cur.fetchall()
         for row in rows:
@@ -100,6 +144,16 @@ class DBManager:
 
 
 def employer_filtering():
+    """
+    Функция для нахождения и фильтрации массива данных о вакансиях с hh.ru и записи их в файл
+    :return: Отфильтрованный и приведенный к общему шаблону массив с необходимой информацией об вакансиях
+            {'name': Название компании,
+            'description': Описание компании,
+            'area': Город, где находится глав. офис,
+            'hh.ru_url': ссылка на кампанию на сайте hh.ru,
+            'site_url': ссылка на вебсайт компании,
+            'vacancy_count': количество вакансий компании}
+    """
     for emp_id in employers_id:
         data_emp = json.loads(requests.get('https://api.hh.ru/employers/' + str(emp_id)).content.decode())
         employer_name = data_emp.get("name")
@@ -112,7 +166,7 @@ def employer_filtering():
             '</p>', '').replace(
             '<ul>', '').replace(
             '</ul>', '').replace(
-            '<li>', '').replace(
+            '<li>', '').replace(  # Это символы исключения, нужны для нормального отображения описания компаний
             '</li>', '').replace(
             '&quot;', '').replace(
             '\r\n', '').replace(
@@ -139,6 +193,11 @@ def employer_filtering():
 
 
 def upload_databace():
+    """
+    Функция для подключения к PostgreSQL, создания в ней таблиц  и заполнения их данными, полученными с сайта
+    :return:
+    """
+    # Подключение к базе данных
     conn = psycopg2.connect(
         host='localhost',
         database='hh.ru',
@@ -151,17 +210,19 @@ def upload_databace():
                 cycle_1 = 1
                 cycle_2 = 1
 
+                # Создание таблицы для вакансий
                 create_table_vacancy = """CREATE TABLE vacancy(
                                     vacancy_id int PRIMARY KEY,
                                     vacancy_name varchar(100) NOT NULL,
                                     url varchar(100),
-                                    salary_from int,
+                                    salary_from int,            
                                     salary_to int,
                                     experience text,
                                     requirement_and_responsibility text,
                                     employer varchar(100) REFERENCES employer(employer_name) NOT NULL
                                 );"""
 
+                # Создание таблицы для компаний
                 create_table_employer = """CREATE TABLE employer(
                                     employer_id int NOT NULL,
                                     employer_name varchar(100) PRIMARY KEY,
@@ -175,6 +236,7 @@ def upload_databace():
                 cur.execute(create_table_employer)
                 cur.execute(create_table_vacancy)
 
+                # Заполнение таблицы с информацией об компаниях
                 for employer in data_employers:
                     cur.execute("INSERT INTO employer VALUES (%s, %s, %s, %s, %s, %s, %s)", (
                         cycle_1, employer.get('name'),
@@ -185,6 +247,7 @@ def upload_databace():
                         employer.get('vacancy_count')))
                     cycle_1 += 1
 
+                # Заполнение таблицы с информацией об вакансиях
                 for vacancy in data_vacancies:
                     cur.execute("INSERT INTO vacancy VALUES (%s, %s, %s, %s, %s, %s, %s, %s)", (
                         cycle_2, vacancy.get('name'),
@@ -196,8 +259,9 @@ def upload_databace():
                         vacancy.get('employer')))
                     cycle_2 += 1
 
-                # cur.execute('SELECT * FROM employer')
-                cur.execute('SELECT * FROM vacancy')
+                    # Опциональный выбор вывода в консоль
+                # cur.execute('SELECT * FROM employer')             # Вывести полную таблицу с компаниями (11 шт.)
+                cur.execute('SELECT * FROM vacancy')  # Вывести полную таблицу с вакансиями (1100 шт.)
 
                 conn.commit()
                 rows = cur.fetchall()
@@ -211,8 +275,7 @@ def upload_databace():
 
 def vacancy_parser():
     """
-
-    :return:
+    Функция для инициации в класс компаний для получения по каждой информации об их вакансиях и записи ее в файл
     """
     employer_filtering()
 
@@ -227,22 +290,21 @@ def vacancy_parser():
     with open('json-vacancies.json', 'w', encoding='utf-8') as file:
         json.dump(data_vacancies, file, ensure_ascii=False)
 
-
 # Поиск и запись в файлы информации по компаниям и их вакансиям
-# vacancy_parser()
+# vacancy_parser()                                                                              # - (включить 1 раз)
 # Создания и заполнение таблиц PostgreSQL данными и информацией об компаниях и их вакансиях
-# upload_databace()
+# upload_databace()                                                                             # - (включить 1 раз)
 
 
 # Инициация класса для работы с базой данных
-manager = DBManager()
+# manager = DBManager()                                                                             # Опционально
 # Получает список всех компаний и количество вакансий у каждой компании
-# manager.get_companies_and_vacancies_count()
+# manager.get_companies_and_vacancies_count()                                                       # Опционально
 # Получает список всех вакансий с указанием названия компании, названия вакансии и зарплаты и ссылки на вакансию
-# manager.get_all_vacancies()
+# manager.get_all_vacancies()                                                                       # Опционально
 # Получает среднюю зарплату по вакансиям
-# manager.get_avg_salary()
+# manager.get_avg_salary()                                                                          # Опционально
 # Получает список всех вакансий, у которых зарплата выше средней по всем вакансиям
-# manager.get_vacancies_with_higher_salary()
+# manager.get_vacancies_with_higher_salary()                                                        # Опционально
 # Получает список всех вакансий, в названии которых содержатся переданные в метод слова
-# manager.get_vacancies_with_keyword(input('Введите ключевое слово:\n'))
+# manager.get_vacancies_with_keyword(input('Введите ключевое слово:\n'))                            # Опционально
