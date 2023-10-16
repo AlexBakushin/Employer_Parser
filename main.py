@@ -18,8 +18,10 @@ class EmployerParser:
         Метод для фильтрации массива данных о вакансиях с hh.ru
         :return: Отфильтрованный и приведенный к общему шаблону массив с необходимой информацией об вакансиях
         """
+        parametrs = {'per_page': 100}
         data_vac = json.loads(
-            requests.get('https://api.hh.ru/vacancies?employer_id=' + str(self.emp_id)).content.decode())['items']
+            requests.get('https://api.hh.ru/vacancies?employer_id=' + str(self.emp_id), parametrs).content.decode())[
+            'items']
         filtered_vacancies = []
         for vac in data_vac:
             name_vacancy = vac.get('name')
@@ -45,6 +47,56 @@ class EmployerParser:
                                 'employer': employer}
             filtered_vacancies.append(filtered_vacancy)
         return filtered_vacancies
+
+
+class DBManager:
+    def __init__(self):
+        self.conn = psycopg2.connect(host='localhost', database='hh.ru', user='postgres', password='2202')
+        self.cur = self.conn.cursor()
+        # self.avg_salary = int(self.get_avg_salary())
+
+    def get_companies_and_vacancies_count(self):
+        self.cur.execute("SELECT employer_name, vacancy_count FROM employer")
+        rows = self.cur.fetchall()
+        for row in rows:
+            print(row)
+
+    def get_all_vacancies(self):
+        self.cur.execute("SELECT  employer, vacancy_name,  salary_from, salary_to, url FROM vacancy")
+        rows = self.cur.fetchall()
+        for row in rows:
+            print(row)
+
+    def get_avg_salary(self):
+        self.cur.execute("SELECT  salary_from, salary_to FROM vacancy")
+        rows = self.cur.fetchall()
+        result = 0
+        cycle = 0
+        for row in rows:
+            if row[0] is not None and row[1] is not None:
+                res = (row[0] + row[1]) / 2
+                result += res
+                cycle += 1
+        result /= cycle
+        result_round = int(result + (0.5 if result > 0 else -0.5))
+        print(f'Средняя зарплата: {result_round} руб.')
+        return result_round
+
+    def get_vacancies_with_higher_salary(self):
+        avg_salary = int(self.get_avg_salary())
+        self.cur.execute("SELECT * FROM vacancy")
+        rows = self.cur.fetchall()
+        for row in rows:
+            if row[3] is not None and row[4] is not None:
+                if row[3] > avg_salary and row[4] > avg_salary:
+                    print(row)
+
+    def get_vacancies_with_keyword(self, word):
+        self.cur.execute("SELECT * FROM vacancy")
+        rows = self.cur.fetchall()
+        for row in rows:
+            if row[6].find(word) != -1 or row[1].find(word) != -1:
+                print(row)
 
 
 def employer_filtering():
@@ -101,18 +153,18 @@ def upload_databace():
 
                 create_table_vacancy = """CREATE TABLE vacancy(
                                     vacancy_id int PRIMARY KEY,
-                                    name varchar(100) NOT NULL,
+                                    vacancy_name varchar(100) NOT NULL,
                                     url varchar(100),
                                     salary_from int,
                                     salary_to int,
                                     experience text,
                                     requirement_and_responsibility text,
-                                    employer varchar(100) REFERENCES employer(name) NOT NULL
+                                    employer varchar(100) REFERENCES employer(employer_name) NOT NULL
                                 );"""
 
                 create_table_employer = """CREATE TABLE employer(
                                     employer_id int NOT NULL,
-                                    name varchar(100) PRIMARY KEY,
+                                    employer_name varchar(100) PRIMARY KEY,
                                     description text,
                                     area varchar(100),
                                     hh_ru_url varchar(100),
@@ -145,7 +197,7 @@ def upload_databace():
                     cycle_2 += 1
 
                 # cur.execute('SELECT * FROM employer')
-                # cur.execute('SELECT * FROM vacancy')
+                cur.execute('SELECT * FROM vacancy')
 
                 conn.commit()
                 rows = cur.fetchall()
@@ -157,17 +209,40 @@ def upload_databace():
         conn.close()
 
 
-employer_filtering()
+def vacancy_parser():
+    """
 
-names_vac = []
-for i in range(len(employers_id)):
-    names_vac.append(f'vacancy{i}')
-    names_vac[i] = EmployerParser(employers_id[i])
-    vacancy = names_vac[i].vacancy_filtering()
-    for vac in vacancy:
-        data_vacancies.append(vac)
+    :return:
+    """
+    employer_filtering()
 
-with open('json-vacancies.json', 'w', encoding='utf-8') as file:
-    json.dump(data_vacancies, file, ensure_ascii=False)
+    names_vac = []
+    for i in range(len(employers_id)):
+        names_vac.append(f'vacancy{i}')
+        names_vac[i] = EmployerParser(employers_id[i])
+        vacancy = names_vac[i].vacancy_filtering()
+        for vac in vacancy:
+            data_vacancies.append(vac)
 
-upload_databace()
+    with open('json-vacancies.json', 'w', encoding='utf-8') as file:
+        json.dump(data_vacancies, file, ensure_ascii=False)
+
+
+# Поиск и запись в файлы информации по компаниям и их вакансиям
+# vacancy_parser()
+# Создания и заполнение таблиц PostgreSQL данными и информацией об компаниях и их вакансиях
+# upload_databace()
+
+
+# Инициация класса для работы с базой данных
+manager = DBManager()
+# Получает список всех компаний и количество вакансий у каждой компании
+# manager.get_companies_and_vacancies_count()
+# Получает список всех вакансий с указанием названия компании, названия вакансии и зарплаты и ссылки на вакансию
+# manager.get_all_vacancies()
+# Получает среднюю зарплату по вакансиям
+# manager.get_avg_salary()
+# Получает список всех вакансий, у которых зарплата выше средней по всем вакансиям
+# manager.get_vacancies_with_higher_salary()
+# Получает список всех вакансий, в названии которых содержатся переданные в метод слова
+# manager.get_vacancies_with_keyword(input('Введите ключевое слово:\n'))
