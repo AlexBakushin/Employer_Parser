@@ -75,7 +75,10 @@ class DBManager:
         """
         Инициация подключения к базе данных
         """
-        self.conn = psycopg2.connect(host='localhost', database='hh.ru', user='postgres', password='2202')
+        self.conn = psycopg2.connect(host=user_db_info[0],
+                                     database=user_db_info[1],
+                                     user=user_db_info[2],
+                                     password=user_db_info[3])
         self.cur = self.conn.cursor()
 
     def get_companies_and_vacancies_count(self):
@@ -199,11 +202,10 @@ def upload_databace():
     """
     # Подключение к базе данных
     conn = psycopg2.connect(
-        host='localhost',
-        database='hh.ru',
-        user='postgres',
-        password='2202'
-    )
+        host=user_db_info[0],
+        database=user_db_info[1],
+        user=user_db_info[2],
+        password=user_db_info[3])
     try:
         with conn:
             with conn.cursor() as cur:
@@ -290,21 +292,54 @@ def vacancy_parser():
     with open('json-vacancies.json', 'w', encoding='utf-8') as file:
         json.dump(data_vacancies, file, ensure_ascii=False)
 
+
+def user_interaction():
+    """
+    Функция для работы с пользователем
+    :return: Параметры поиска вакансий
+    """
+    # Запрос host
+    user_host = input('Введите host вашей базы данных:\n')
+    # Запрос названия базы данных
+    user_database = input('Введите название для вашей базы данных: \n')
+    # Запрос имени аккаунта в PostgreSQL
+    user_name = input('Введите имя вашего аккаунта PostgreSQL:\n')
+    # Запрос пароля от аккаунта в PostgreSQL для подключения к базе данных
+    user_password = input('Введите пароль от вашего аккаунта PostgreSQL:\n')
+    # Создание параметров пользователя
+    user_info = (user_host, user_database, user_name, user_password)
+    return user_info
+
+
+user_db_info = user_interaction()
+
 # Поиск и запись в файлы информации по компаниям и их вакансиям
-# vacancy_parser()                                                                              # - (включить 1 раз)
+vacancy_parser()                                           # - (включить 1 раз)
 # Создания и заполнение таблиц PostgreSQL данными и информацией об компаниях и их вакансиях
-# upload_databace()                                                                             # - (включить 1 раз)
+upload_databace()                                          # - (включить 1 раз)
 
-
-# Инициация класса для работы с базой данных
-# manager = DBManager()                                                                             # Опционально
-# Получает список всех компаний и количество вакансий у каждой компании
-# manager.get_companies_and_vacancies_count()                                                       # Опционально
-# Получает список всех вакансий с указанием названия компании, названия вакансии и зарплаты и ссылки на вакансию
-# manager.get_all_vacancies()                                                                       # Опционально
-# Получает среднюю зарплату по вакансиям
-# manager.get_avg_salary()                                                                          # Опционально
-# Получает список всех вакансий, у которых зарплата выше средней по всем вакансиям
-# manager.get_vacancies_with_higher_salary()                                                        # Опционально
-# Получает список всех вакансий, в названии которых содержатся переданные в метод слова
-# manager.get_vacancies_with_keyword(input('Введите ключевое слово:\n'))                            # Опционально
+# Цикл для работы программы с пользователем
+while True:
+    # Инициация класса для работы с базой данных
+    manager = DBManager()
+    command = input("\nВыберите одну из функций:\n"
+                    "1 - Получить список всех компаний и количество вакансий у каждой компании\n"
+                    "2 - Получить список всех вакансий с указанием названия компании,"
+                    " названия вакансии и зарплаты и ссылки на вакансию\n"
+                    "3 - Получить среднюю зарплату по вакансиям\n"
+                    "4 - Получить список всех вакансий, у которых зарплата выше средней по всем вакансиям\n"
+                    "5 - Получить список всех вакансий, в названии которых содержатся переданные в метод слова\n"
+                    "exit - Завершить программу\n"
+                    "\nВведите команду: \n")
+    if command == "exit":
+        break
+    elif command == '1':
+        manager.get_companies_and_vacancies_count()
+    elif command == '2':
+        manager.get_all_vacancies()
+    elif command == '3':
+        manager.get_avg_salary()
+    elif command == '4':
+        manager.get_vacancies_with_higher_salary()
+    elif command == '5':
+        manager.get_vacancies_with_keyword(input('Введите ключевое слово:\n'))
