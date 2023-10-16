@@ -1,29 +1,6 @@
-# import psycopg2
-#
-#
-# conn = psycopg2.connect(
-#     host='localhost',
-#     database='test',
-#     user='postgres',
-#     password='2202'
-# )
-# try:
-#     with conn:
-#         with conn.cursor() as cur:
-#             cur.execute("INSERT INTO user_acount VALUES (%s, %s)", (6, "Len"))
-#             cur.execute('SELECT * FROM user_acount')
-#
-#             rows = cur.fetchall()
-#
-#             for row in rows:
-#                 print(row)
-#
-# finally:
-#     conn.close()
-
-
 import requests
 import json
+import psycopg2
 
 employers_id = [1740, 1942330, 2245, 4219, 2748, 3529, 23427, 4352, 3127, 49357, 39305]
 
@@ -48,24 +25,24 @@ class EmployerParser:
             name_vacancy = vac.get('name')
             url_vacancy = vac.get('alternate_url')
             if vac.get('salary') is None:
-                salary_vacancy = 'По договоренности'
+                salary_vacancy_from = None
+                salary_vacancy_to = None
             else:
-                if vac.get("salary").get("from") is None:
-                    salary_vacancy = f'от {0} до {vac.get("salary").get("to")}'
-                elif vac.get("salary").get("to") is None:
-                    salary_vacancy = f'от {vac.get("salary").get("from")} до {0}'
-                else:
-                    salary_vacancy = f'от {vac.get("salary").get("from")} до {vac.get("salary").get("to")}'
+                salary_vacancy_from = vac.get("salary").get("from")
+                salary_vacancy_to = vac.get("salary").get("to")
             experience_vacancy = vac.get('experience').get('name')
             requirement = f"Требования: {vac.get('snippet').get('requirement')}\n" \
                           f"Обязаности: {vac.get('snippet').get('responsibility')}"
             requirement_and_responsibility = requirement.replace('\n', '').replace('<highlighttext>', '').replace(
                 '</highlighttext>', '')
+            employer = vac.get('employer').get('name')
             filtered_vacancy = {'name': name_vacancy,
                                 'url': url_vacancy,
-                                'salary': salary_vacancy,
+                                'salary_from': salary_vacancy_from,
+                                'salary_to': salary_vacancy_to,
                                 'experience': experience_vacancy,
-                                'requirement_and_responsibility': requirement_and_responsibility}
+                                'requirement_and_responsibility': requirement_and_responsibility,
+                                'employer': employer}
             filtered_vacancies.append(filtered_vacancy)
         return filtered_vacancies
 
@@ -78,6 +55,7 @@ def employer_filtering():
         employer_description = description.replace(
             '<p>', '').replace(
             '<strong>', '').replace(
+            '\xa0', '').replace(
             '</strong>', '').replace(
             '</p>', '').replace(
             '<ul>', '').replace(
@@ -108,13 +86,88 @@ def employer_filtering():
         json.dump(data_employers, file, ensure_ascii=False)
 
 
+def upload_databace():
+    conn = psycopg2.connect(
+        host='localhost',
+        database='hh.ru',
+        user='postgres',
+        password='2202'
+    )
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cycle_1 = 1
+                cycle_2 = 1
+
+                create_table_vacancy = """CREATE TABLE vacancy(
+                                    vacancy_id int PRIMARY KEY,
+                                    name varchar(100) NOT NULL,
+                                    url varchar(100),
+                                    salary_from int,
+                                    salary_to int,
+                                    experience text,
+                                    requirement_and_responsibility text,
+                                    employer varchar(100) REFERENCES employer(name) NOT NULL
+                                );"""
+
+                create_table_employer = """CREATE TABLE employer(
+                                    employer_id int NOT NULL,
+                                    name varchar(100) PRIMARY KEY,
+                                    description text,
+                                    area varchar(100),
+                                    hh_ru_url varchar(100),
+                                    site_url varchar(100),
+                                    vacancy_count int
+                                );"""
+
+                cur.execute(create_table_employer)
+                cur.execute(create_table_vacancy)
+
+                for employer in data_employers:
+                    cur.execute("INSERT INTO employer VALUES (%s, %s, %s, %s, %s, %s, %s)", (
+                        cycle_1, employer.get('name'),
+                        employer.get('description'),
+                        employer.get('area'),
+                        employer.get('hh.ru_url'),
+                        employer.get('site_url'),
+                        employer.get('vacancy_count')))
+                    cycle_1 += 1
+
+                for vacancy in data_vacancies:
+                    cur.execute("INSERT INTO vacancy VALUES (%s, %s, %s, %s, %s, %s, %s, %s)", (
+                        cycle_2, vacancy.get('name'),
+                        vacancy.get('url'),
+                        vacancy.get('salary_from'),
+                        vacancy.get('salary_to'),
+                        vacancy.get('experience'),
+                        vacancy.get('requirement_and_responsibility'),
+                        vacancy.get('employer')))
+                    cycle_2 += 1
+
+                # cur.execute('SELECT * FROM employer')
+                # cur.execute('SELECT * FROM vacancy')
+
+                conn.commit()
+                rows = cur.fetchall()
+
+                for row in rows:
+                    print(row)
+
+    finally:
+        conn.close()
+
+
 employer_filtering()
 
 names_vac = []
 for i in range(len(employers_id)):
     names_vac.append(f'vacancy{i}')
     names_vac[i] = EmployerParser(employers_id[i])
-    data_vacancies.append(names_vac[i].vacancy_filtering())
+    vacancy = names_vac[i].vacancy_filtering()
+    for vac in vacancy:
+        data_vacancies.append(vac)
 
 with open('json-vacancies.json', 'w', encoding='utf-8') as file:
     json.dump(data_vacancies, file, ensure_ascii=False)
+
+upload_databace()
